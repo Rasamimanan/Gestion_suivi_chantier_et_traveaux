@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "Suivi Chantier",
+    "slug": "suivi-chantier",
+    "version": "1.0.0",
+    "scheme": "suivi-chantier",
+    "web": { "bundler": "metro" },
+    "plugins": ["expo-router", "expo-secure-store"],
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#3b82f6"
+      }
+    },
+    "ios": { "supportsTablet": true }
+  }
+}
