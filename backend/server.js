@@ -21,6 +21,9 @@ app.use('/api/commentaires', require('./routes/commentaires'));
 app.use('/api/depenses', require('./routes/depenses'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/recherche', require('./routes/recherche'));
+const { authenticateToken } = require('./middleware/roles');
+
+app.use('/api/budget', authenticateToken, require('./routes/budget'));
 
 app.get('/', (req, res) => res.json({ message: '🏗️ API Suivi Chantier v3 ✅', version: '3.0.0' }));
 app.use((req, res) => res.status(404).json({ error: 'Route non trouvée.' }));
