@@ -2,71 +2,122 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../config/database');
 
-const generateToken = (userId) =>
-  jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
+const JWT_SECRET = process.env.JWT_SECRET;
 
-// POST /api/auth/register
+/* ================= TOKEN ================= */
+function generateToken(user) {
+  return jwt.sign(
+    {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+    },
+    JWT_SECRET,
+    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+  );
+}
+
+/* ================= REGISTER ================= */
 exports.register = async (req, res) => {
   try {
-    const { nom, prenom, email, mot_de_passe, role } = req.body;
-    const exists = await db.query('SELECT id FROM utilisateurs WHERE email = $1', [email]);
-    if (exists.rows.length > 0) {
-      return res.status(409).json({ error: 'Cet email est déjà utilisé.' });
+    const { nom, prenom, email, password, role } = req.body;
+
+    // validation simple
+    if (!email || !password || !nom) {
+      return res.status(400).json({ error: 'Champs obligatoires manquants' });
     }
-    const hash = await bcrypt.hash(mot_de_passe, 10);
-    const result = await db.query(
-      `INSERT INTO utilisateurs (nom, prenom, email, mot_de_passe, role)
-       VALUES ($1, $2, $3, $4, $5) RETURNING id, nom, prenom, email, role`,
-      [nom, prenom, email, hash, role || 'utilisateur']
+
+    const emailLower = email.toLowerCase();
+
+    // check email exist
+    const exists = await db.query(
+      'SELECT id FROM utilisateurs WHERE email = $1',
+      [emailLower]
     );
+
+    if (exists.rows.length > 0) {
+      return res.status(409).json({ error: 'Email déjà utilisé' });
+    }
+
+    // hash password
+    const hash = await bcrypt.hash(password, 10);
+
+    // insert user (statut actif direct pour ton app)
+    const result = await db.query(
+      `INSERT INTO utilisateurs 
+        (nom, prenom, email, password, role, statut)
+       VALUES 
+        ($1, $2, $3, $4, $5, 'actif')
+       RETURNING id, nom, prenom, email, role, statut`,
+      [nom, prenom, emailLower, hash, role || 'utilisateur']
+    );
+
     const user = result.rows[0];
-    const token = generateToken(user.id);
-    res.status(201).json({ message: 'Compte créé avec succès.', token, user });
+
+    const token = generateToken(user);
+
+    return res.status(201).json({
+      message: 'Compte créé avec succès',
+      token,
+      user,
+    });
+
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('REGISTER ERROR:', err);
+    return res.status(500).json({ error: 'Erreur serveur' });
   }
 };
 
-// POST /api/auth/login
+/* ================= LOGIN ================= */
 exports.login = async (req, res) => {
   try {
-    const { email, mot_de_passe } = req.body;
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email et mot de passe requis' });
+    }
+
+    const emailLower = email.toLowerCase();
+
+    // find user
     const result = await db.query(
-      'SELECT * FROM utilisateurs WHERE email = $1 AND actif = TRUE',
-      [email]
+      'SELECT * FROM utilisateurs WHERE email = $1',
+      [emailLower]
     );
+
     if (result.rows.length === 0) {
-      return res.status(401).json({ error: 'Email ou mot de passe incorrect.' });
+      return res.status(401).json({ error: 'Email ou mot de passe incorrect' });
     }
+
     const user = result.rows[0];
-    const valid = await bcrypt.compare(mot_de_passe, user.mot_de_passe);
-    if (!valid) {
-      return res.status(401).json({ error: 'Email ou mot de passe incorrect.' });
+
+    // check statut (IMPORTANT avec ta DB)
+    if (user.statut !== 'actif') {
+      return res.status(403).json({
+        error: 'Compte non actif (en attente ou suspendu)'
+      });
     }
-    const token = generateToken(user.id);
-    const { mot_de_passe: _, ...userSafe } = user;
-    res.json({ message: 'Connexion réussie.', token, user: userSafe });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-};
 
-// GET /api/auth/me
-exports.me = async (req, res) => {
-  res.json({ user: req.user });
-};
+    // check password
+    const valid = await bcrypt.compare(password, user.password);
 
-// PUT /api/auth/password
-exports.changePassword = async (req, res) => {
-  try {
-    const { ancien_mot_de_passe, nouveau_mot_de_passe } = req.body;
-    const result = await db.query('SELECT mot_de_passe FROM utilisateurs WHERE id = $1', [req.user.id]);
-    const valid = await bcrypt.compare(ancien_mot_de_passe, result.rows[0].mot_de_passe);
-    if (!valid) return res.status(401).json({ error: 'Ancien mot de passe incorrect.' });
-    const hash = await bcrypt.hash(nouveau_mot_de_passe, 10);
-    await db.query('UPDATE utilisateurs SET mot_de_passe = $1 WHERE id = $2', [hash, req.user.id]);
-    res.json({ message: 'Mot de passe modifié avec succès.' });
+    if (!valid) {
+      return res.status(401).json({ error: 'Email ou mot de passe incorrect' });
+    }
+
+    const token = generateToken(user);
+
+    // remove password before sending
+    const { password: _, ...userSafe } = user;
+
+    return res.json({
+      message: 'Connexion réussie',
+      token,
+      user: userSafe,
+    });
+
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('LOGIN ERROR:', err);
+    return res.status(500).json({ error: 'Erreur serveur' });
   }
 };

@@ -1,47 +1,62 @@
 const jwt = require('jsonwebtoken');
 const db = require('../config/database');
 
-const authMiddleware = async (req, res, next) => {
+const JWT_SECRET = process.env.JWT_SECRET;
+
+async function authMiddleware(req, res, next) {
   try {
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ error: 'Token manquant ou invalide.' });
+
+    // 1. Vérifier header
+    if (!authHeader) {
+      return res.status(401).json({ error: 'Token manquant' });
     }
 
-    const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    // 2. Extraire token
+    const token = authHeader.startsWith('Bearer ')
+      ? authHeader.split(' ')[1]
+      : authHeader;
 
+    if (!token) {
+      return res.status(401).json({ error: 'Token manquant' });
+    }
+
+    // 3. Vérifier token JWT
+    let decoded;
+    try {
+      decoded = jwt.verify(token, JWT_SECRET);
+    } catch (err) {
+      return res.status(401).json({ error: 'Token invalide ou expiré' });
+    }
+
+    // 4. Vérifier user en base
     const result = await db.query(
-      'SELECT id, nom, prenom, email, role, actif FROM utilisateurs WHERE id = $1',
-      [decoded.userId]
+      'SELECT id, email, role, statut, nom, prenom FROM utilisateurs WHERE id = $1',
+      [decoded.id]
     );
 
-    if (result.rows.length === 0 || !result.rows[0].actif) {
-      return res.status(401).json({ error: 'Utilisateur introuvable ou désactivé.' });
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: 'Utilisateur introuvable' });
     }
 
-    req.user = result.rows[0];
+    const user = result.rows[0];
+
+    // 5. Vérifier statut compte
+    if (user.statut !== 'actif') {
+      return res.status(403).json({
+        error: 'Compte non actif'
+      });
+    }
+
+    // 6. Injecter user dans req
+    req.user = user;
+
     next();
-  } catch (err) {
-    if (err.name === 'TokenExpiredError') {
-      return res.status(401).json({ error: 'Session expirée. Veuillez vous reconnecter.' });
-    }
-    return res.status(401).json({ error: 'Token invalide.' });
-  }
-};
 
-const adminOnly = (req, res, next) => {
-  if (req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Accès réservé aux administrateurs.' });
+  } catch (error) {
+    console.error('AUTH MIDDLEWARE ERROR:', error);
+    return res.status(500).json({ error: 'Erreur serveur' });
   }
-  next();
-};
+}
 
-const chefOuAdmin = (req, res, next) => {
-  if (!['admin', 'chef_projet'].includes(req.user.role)) {
-    return res.status(403).json({ error: 'Accès non autorisé.' });
-  }
-  next();
-};
-
-module.exports = { authMiddleware, adminOnly, chefOuAdmin };
+module.exports = { authMiddleware };

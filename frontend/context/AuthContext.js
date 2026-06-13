@@ -1,6 +1,13 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { login as apiLogin, register as apiRegister } from '../services/api';
-import { getToken, getUser, removeToken, removeUser, saveToken, saveUser } from '../services/storage';
+import {
+  getToken,
+  getUser,
+  removeToken,
+  removeUser,
+  saveToken,
+  saveUser,
+} from '../services/storage';
 
 const AuthContext = createContext(null);
 
@@ -9,35 +16,65 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  /* ================= LOAD SESSION ================= */
   useEffect(() => {
-    (async () => {
+    const init = async () => {
       try {
-        const [t, u] = await Promise.all([getToken(), getUser()]);
-        if (t && u) { setToken(t); setUser(u); }
+        const storedToken = await getToken();
+        const storedUser = await getUser();
+
+        if (storedToken && storedUser) {
+          setToken(storedToken);
+          setUser(storedUser);
+        }
+      } catch (e) {
+        console.log('Auth init error:', e);
       } finally {
         setLoading(false);
       }
-    })();
+    };
+
+    init();
   }, []);
 
-  const login = async (email, mot_de_passe) => {
-    const res = await apiLogin({ email, mot_de_passe });
-    const { token: t, user: u } = res.data;
-    await Promise.all([saveToken(t), saveUser(u)]);
-    setToken(t);
-    setUser(u);
-    return u;
+  /* ================= LOGIN ================= */
+  const login = async (email, password) => {
+    const res = await apiLogin({
+      email: email.trim().toLowerCase(),
+      password,
+    });
+
+    const data = res.data;
+
+    if (!data?.token || !data?.utilisateur) {
+      throw new Error('Réponse backend invalide');
+    }
+
+    await Promise.all([
+      saveToken(data.token),
+      saveUser(data.utilisateur),
+    ]);
+
+    setToken(data.token);
+    setUser(data.utilisateur);
+
+    return data;
   };
 
-  const register = async (data) => {
-    const res = await apiRegister(data);
-    const { token: t, user: u } = res.data;
-    await Promise.all([saveToken(t), saveUser(u)]);
-    setToken(t);
-    setUser(u);
-    return u;
+  /* ================= REGISTER ================= */
+  const register = async (payload) => {
+    const res = await apiRegister({
+      nom: payload.nom,
+      prenom: payload.prenom,
+      email: payload.email.trim().toLowerCase(),
+      password: payload.password, // ⚠️ IMPORTANT: backend attend password
+      role: payload.role || 'utilisateur',
+    });
+
+    return res.data;
   };
 
+  /* ================= LOGOUT ================= */
   const logout = async () => {
     await Promise.all([removeToken(), removeUser()]);
     setToken(null);
@@ -45,7 +82,17 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, logout, isAuthenticated: !!token }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        token,
+        loading,
+        login,
+        register,
+        logout,
+        isAuthenticated: !!token,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

@@ -2,7 +2,9 @@ const router = require('express').Router();
 const ctrl = require('../controllers/chantierController');
 const { authMiddleware } = require('../middleware/auth');
 
+/* PROTECTION GLOBAL */
 router.use(authMiddleware);
+
 router.get('/', ctrl.getAll);
 router.get('/:id', ctrl.getById);
 router.get('/:id/etapes', ctrl.getEtapes);

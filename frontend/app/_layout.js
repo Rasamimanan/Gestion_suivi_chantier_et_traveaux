@@ -11,17 +11,44 @@ function RootNavigator() {
 
   useEffect(() => {
     if (loading) return;
-    const inAuth = segments[0] === '(auth)';
-    if (!isAuthenticated && !inAuth) router.replace('/(auth)/login');
-    else if (isAuthenticated && inAuth) router.replace('/(tabs)');
+
+    const inAuthGroup = segments[0] === '(auth)';
+
+    // 🔐 NON CONNECTÉ → bloqué hors auth
+    if (!isAuthenticated && !inAuthGroup) {
+      router.replace('/(auth)/login');
+    }
+
+    // 🔓 CONNECTÉ → bloque accès login/register
+    if (isAuthenticated && inAuthGroup) {
+      router.replace('/(tabs)');
+    }
+
   }, [isAuthenticated, loading, segments]);
 
-  if (loading) return <View className="flex-1 justify-center items-center bg-white"><ActivityIndicator size="large" color="#3b82f6" /></View>;
+  if (loading) {
+    return (
+      <View className="flex-1 justify-center items-center bg-white">
+        <ActivityIndicator size="large" color="#3b82f6" />
+      </View>
+    );
+  }
 
   return (
-    <Stack screenOptions={{ headerStyle: { backgroundColor: '#3b82f6' }, headerTintColor: '#fff', headerTitleStyle: { fontWeight: 'bold' } }}>
+    <Stack
+      screenOptions={{
+        headerStyle: { backgroundColor: '#3b82f6' },
+        headerTintColor: '#fff',
+        headerTitleStyle: { fontWeight: 'bold' },
+      }}
+    >
+      {/* AUTH GROUP */}
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+
+      {/* APP TABS */}
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+
+      {/* PROTECTED SCREENS */}
       <Stack.Screen name="chantier/[id]" options={{ title: 'Chantier' }} />
       <Stack.Screen name="chantier/[id]/etapes" options={{ title: 'Étapes' }} />
       <Stack.Screen name="chantier/[id]/depenses" options={{ title: 'Dépenses' }} />
@@ -34,6 +61,11 @@ function RootNavigator() {
   );
 }
 
+// ================= ROOT =================
 export default function RootLayout() {
-  return <AuthProvider><RootNavigator /></AuthProvider>;
+  return (
+    <AuthProvider>
+      <RootNavigator />
+    </AuthProvider>
+  );
 }

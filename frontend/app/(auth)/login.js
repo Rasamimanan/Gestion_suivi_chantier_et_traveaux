@@ -1,89 +1,175 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
-  ActivityIndicator, Alert, KeyboardAvoidingView,
-  Platform, ScrollView, Text, TextInput, TouchableOpacity, View
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
+
 import { useAuth } from '../../context/AuthContext';
 
 export default function LoginScreen() {
   const router = useRouter();
   const { login } = useAuth();
-  const [form, setForm] = useState({ email: '', mot_de_passe: '' });
+
+  const [form, setForm] = useState({
+    email: '',
+    password: '',
+  });
+
   const [loading, setLoading] = useState(false);
-  const [showPass, setShowPass] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async () => {
-    if (!form.email || !form.mot_de_passe) {
-      Alert.alert('Erreur', 'Remplissez tous les champs.');
+    if (!form.email || !form.password) {
+      Alert.alert('Erreur', 'Veuillez remplir tous les champs');
       return;
     }
+
     setLoading(true);
+
     try {
-      await login(form.email.trim().toLowerCase(), form.mot_de_passe);
+      await login(form.email, form.password);
+
+      Alert.alert('Succès', 'Connexion réussie');
+
+      router.replace('/(tabs)');
+
     } catch (err) {
-      Alert.alert('Échec de connexion', err.response?.data?.error || 'Erreur réseau.');
+      const message =
+        err?.response?.data?.error ||
+        err?.message ||
+        'Erreur de connexion';
+
+      Alert.alert('Erreur', message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView className="flex-1 bg-blue-600" contentContainerStyle={{ flexGrow: 1 }}>
-        {/* Header */}
-        <View className="flex-1 justify-center items-center px-6 pt-20 pb-8">
-          <Text className="text-6xl mb-4">🏗️</Text>
-          <Text className="text-3xl font-bold text-white mb-2">Suivi Chantier</Text>
-          <Text className="text-blue-200 text-base">Gestion professionnelle de chantiers</Text>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={{ flex: 1 }}
+    >
+      <ScrollView
+        contentContainerStyle={{
+          flexGrow: 1,
+          justifyContent: 'center',
+          padding: 20,
+          backgroundColor: '#2563eb',
+        }}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* TITLE */}
+        <View style={{ marginBottom: 30, alignItems: 'center' }}>
+          <Text style={{ fontSize: 28, fontWeight: 'bold', color: 'white' }}>
+            Connexion
+          </Text>
+          <Text style={{ color: '#dbeafe', marginTop: 5 }}>
+            Suivi Chantier App
+          </Text>
         </View>
 
-        {/* Formulaire */}
-        <View className="bg-white rounded-t-3xl px-6 pt-8 pb-12">
-          <Text className="text-2xl font-bold text-gray-800 mb-6">Connexion</Text>
+        {/* FORM */}
+        <View style={{ backgroundColor: 'white', padding: 20, borderRadius: 12 }}>
 
-          <Text className="text-sm font-semibold text-gray-600 mb-1">Email</Text>
+          {/* EMAIL */}
+          <Text style={{ marginBottom: 5, fontWeight: '600' }}>Email</Text>
+
           <TextInput
-            className="border border-gray-200 rounded-xl px-4 py-3 mb-4 text-gray-800 bg-gray-50"
-            placeholder="votre@email.com"
+            style={input}
+            placeholder="exemple@email.com"
+            value={form.email}
+            onChangeText={(text) =>
+              setForm({ ...form, email: text })
+            }
             keyboardType="email-address"
             autoCapitalize="none"
-            value={form.email}
-            onChangeText={(v) => setForm({ ...form, email: v })}
+            editable={!loading}
           />
 
-          <Text className="text-sm font-semibold text-gray-600 mb-1">Mot de passe</Text>
-          <View className="flex-row border border-gray-200 rounded-xl mb-6 bg-gray-50">
+          {/* PASSWORD */}
+          <Text style={{ marginBottom: 5, fontWeight: '600', marginTop: 10 }}>
+            Mot de passe
+          </Text>
+
+          <View style={{ position: 'relative' }}>
             <TextInput
-              className="flex-1 px-4 py-3 text-gray-800"
+              style={[input, { paddingRight: 45 }]}
               placeholder="••••••••"
-              secureTextEntry={!showPass}
-              value={form.mot_de_passe}
-              onChangeText={(v) => setForm({ ...form, mot_de_passe: v })}
+              value={form.password}
+              onChangeText={(text) =>
+                setForm({ ...form, password: text })
+              }
+              secureTextEntry={!showPassword}
+              editable={!loading}
             />
-            <TouchableOpacity className="px-4 justify-center" onPress={() => setShowPass(!showPass)}>
-              <Text className="text-gray-400">{showPass ? '🙈' : '👁️'}</Text>
+
+            <TouchableOpacity
+              onPress={() => setShowPassword(!showPassword)}
+              style={{
+                position: 'absolute',
+                right: 10,
+                top: 12,
+              }}
+            >
+              <Text style={{ color: '#2563eb', fontWeight: '600' }}>
+                {showPassword ? '🙈' : '👁️'}
+              </Text>
             </TouchableOpacity>
           </View>
 
+          {/* BUTTON */}
           <TouchableOpacity
-            className={`py-4 rounded-xl items-center mb-4 ${loading ? 'bg-blue-300' : 'bg-blue-600'}`}
             onPress={handleLogin}
             disabled={loading}
+            style={{
+              backgroundColor: loading ? '#93c5fd' : '#2563eb',
+              padding: 15,
+              borderRadius: 10,
+              marginTop: 20,
+              alignItems: 'center',
+            }}
           >
-            {loading
-              ? <ActivityIndicator color="#fff" />
-              : <Text className="text-white font-bold text-base">Se connecter</Text>
-            }
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={{ color: '#fff', fontWeight: 'bold' }}>
+                Se connecter
+              </Text>
+            )}
           </TouchableOpacity>
 
-          <TouchableOpacity className="items-center" onPress={() => router.push('/(auth)/register')}>
-            <Text className="text-gray-500">
-              Pas encore de compte ? <Text className="text-blue-600 font-semibold">Créer un compte</Text>
+          {/* LINK REGISTER */}
+          <TouchableOpacity
+            onPress={() => router.push('/(auth)/register')}
+            style={{ marginTop: 15 }}
+          >
+            <Text style={{ textAlign: 'center', color: '#555' }}>
+              Pas de compte ?{' '}
+              <Text style={{ color: '#2563eb', fontWeight: 'bold' }}>
+                S’inscrire
+              </Text>
             </Text>
           </TouchableOpacity>
+
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
+
+/* ================= STYLE ================= */
+const input = {
+  borderWidth: 1,
+  borderColor: '#ddd',
+  borderRadius: 10,
+  padding: 12,
+};
