@@ -1,209 +1,46 @@
-// services/budgetApi.js
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
+import api from './api';
+import { getUser } from './storage';
 
-const API_BASE_URL = 'http://10.1.1.28:3000/api';
+export const getBudgetChantier = (chantierId) =>
+  api.get(`/budget/chantier/${chantierId}/budget`).then(r => r.data);
 
-// ========== BUDGET API ==========
+export const getBudgetEtape = (etapeId) =>
+  api.get(`/budget/etape/${etapeId}/budget`).then(r => r.data);
 
-/**
- * Obtenir JWT token du storage
- */
-async function getToken() {
-  try {
-    return await AsyncStorage.getItem('userToken');
-  } catch (error) {
-    console.error('Erreur lecture token:', error);
-    return null;
-  }
-}
+export const getDepenses = (filters = {}) =>
+  api.get('/budget/depenses', { params: filters }).then(r => r.data);
 
-/**
- * Vue d'ensemble budget d'un chantier
- */
-export async function getBudgetChantier(chantierId) {
-  try {
-    const token = await getToken();
-    const response = await axios.get(
-      `${API_BASE_URL}/budget/chantier/${chantierId}/budget`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    return response.data;
-  } catch (error) {
-    console.error('Erreur budget chantier:', error);
-    throw error;
-  }
-}
+export const addDepense = (depenseData) =>
+  api.post('/budget/depenses', depenseData).then(r => r.data);
 
-/**
- * Budget par étape
- */
-export async function getBudgetEtape(etapeId) {
-  try {
-    const token = await getToken();
-    const response = await axios.get(
-      `${API_BASE_URL}/budget/etape/${etapeId}/budget`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    return response.data;
-  } catch (error) {
-    console.error('Erreur budget étape:', error);
-    throw error;
-  }
-}
+export const updateDepense = (depenseId, depenseData) =>
+  api.put(`/budget/depenses/${depenseId}`, depenseData).then(r => r.data);
 
-/**
- * Lister les dépenses
- */
-export async function getDepenses(filters = {}) {
-  try {
-    const token = await getToken();
-    const params = new URLSearchParams(filters).toString();
-    const response = await axios.get(
-      `${API_BASE_URL}/budget/depenses${params ? '?' + params : ''}`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    return response.data;
-  } catch (error) {
-    console.error('Erreur dépenses:', error);
-    throw error;
-  }
-}
+export const deleteDepense = (depenseId) =>
+  api.delete(`/budget/depenses/${depenseId}`).then(r => r.data);
 
-/**
- * Ajouter dépense (Admin/Chef seulement)
- */
-export async function addDepense(depenseData) {
-  try {
-    const token = await getToken();
-    const response = await axios.post(
-      `${API_BASE_URL}/budget/depenses`,
-      depenseData,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    return response.data;
-  } catch (error) {
-    console.error('Erreur ajout dépense:', error);
-    throw error;
-  }
-}
+export const getRevenus = (filters = {}) =>
+  api.get('/budget/revenus', { params: filters }).then(r => r.data);
 
-/**
- * Modifier dépense (Admin/Chef seulement)
- */
-export async function updateDepense(depenseId, depenseData) {
-  try {
-    const token = await getToken();
-    const response = await axios.put(
-      `${API_BASE_URL}/budget/depenses/${depenseId}`,
-      depenseData,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    return response.data;
-  } catch (error) {
-    console.error('Erreur modification dépense:', error);
-    throw error;
-  }
-}
+export const addRevenu = (revenuData) =>
+  api.post('/budget/revenus', revenuData).then(r => r.data);
 
-/**
- * Supprimer dépense (Admin/Chef seulement)
- */
-export async function deleteDepense(depenseId) {
-  try {
-    const token = await getToken();
-    const response = await axios.delete(
-      `${API_BASE_URL}/budget/depenses/${depenseId}`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    return response.data;
-  } catch (error) {
-    console.error('Erreur suppression dépense:', error);
-    throw error;
-  }
-}
+export const deleteRevenu = (revenuId) =>
+  api.delete(`/budget/revenus/${revenuId}`).then(r => r.data);
 
-/**
- * Lister les revenus
- */
-export async function getRevenus(filters = {}) {
-  try {
-    const token = await getToken();
-    const params = new URLSearchParams(filters).toString();
-    const response = await axios.get(
-      `${API_BASE_URL}/budget/revenus${params ? '?' + params : ''}`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    return response.data;
-  } catch (error) {
-    console.error('Erreur revenus:', error);
-    throw error;
-  }
-}
+export const getBudgetStatistiques = () =>
+  api.get('/budget/statistiques/budget').then(r => r.data);
 
-/**
- * Ajouter revenu (Admin/Chef seulement)
- */
-export async function addRevenu(revenuData) {
-  try {
-    const token = await getToken();
-    const response = await axios.post(
-      `${API_BASE_URL}/budget/revenus`,
-      revenuData,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    return response.data;
-  } catch (error) {
-    console.error('Erreur ajout revenu:', error);
-    throw error;
-  }
-}
-
-/**
- * Statistiques budget (Admin/Chef seulement)
- */
-export async function getBudgetStatistiques() {
-  try {
-    const token = await getToken();
-    const response = await axios.get(
-      `${API_BASE_URL}/budget/statistiques/budget`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    return response.data;
-  } catch (error) {
-    console.error('Erreur statistiques:', error);
-    throw error;
-  }
-}
-
-/**
- * Obtenir rôle utilisateur
- */
 export async function getUserRole() {
-  try {
-    const userJson = await AsyncStorage.getItem('user');
-    if (userJson) {
-      const user = JSON.parse(userJson);
-      return user.role || 'utilisateur';
-    }
-    return 'utilisateur';
-  } catch (error) {
-    console.error('Erreur lecture rôle:', error);
-    return 'utilisateur';
-  }
+  const user = await getUser();
+  return user?.role || 'utilisateur';
 }
 
-/**
- * Vérifier si utilisateur est Admin ou Chef
- */
 export async function isAdminOrChef() {
   const role = await getUserRole();
   return ['admin', 'chef_chantier'].includes(role);
 }
 
-/**
- * Vérifier si utilisateur est Admin
- */
 export async function isAdmin() {
   const role = await getUserRole();
   return role === 'admin';

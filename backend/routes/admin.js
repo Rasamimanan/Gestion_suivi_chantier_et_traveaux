@@ -1,9 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../config/database');
-const { requireAdmin } = require('../middleware/roles');
+const { authenticateToken, requireAdmin } = require('../middleware/roles');
 
 // ================= MIDDLEWARE =================
+// ✅ FIX: authenticateToken doit être appliqué AVANT requireAdmin,
+// sinon req.utilisateur est toujours undefined et requireAdmin
+// renvoie systématiquement 401 (toutes les routes admin étaient cassées).
+router.use(authenticateToken);
 router.use(requireAdmin);
 
 // ================= LISTE USERS =================
@@ -60,10 +64,10 @@ router.post('/approuver/:id', async (req, res) => {
 
     const result = await pool.query(
       `UPDATE utilisateurs
-       SET statut = $1, email_verifie = true
-       WHERE id = $2
+       SET statut = 'actif'
+       WHERE id = $1
        RETURNING id, email, statut`,
-      ['actif', id]
+      [id]
     );
 
     res.json({
@@ -81,6 +85,10 @@ router.post('/approuver/:id', async (req, res) => {
 router.post('/rejeter/:id', async (req, res) => {
   try {
     const { id } = req.params;
+
+    if (Number(id) === req.utilisateur.id) {
+      return res.status(400).json({ error: 'Action impossible sur votre propre compte' });
+    }
 
     const check = await pool.query(
       'SELECT id FROM utilisateurs WHERE id = $1',
@@ -116,6 +124,10 @@ router.put('/role/:id', async (req, res) => {
       return res.status(400).json({ error: 'Rôle invalide' });
     }
 
+    if (Number(id) === req.utilisateur.id && role !== 'admin') {
+      return res.status(400).json({ error: 'Vous ne pouvez pas retirer votre propre rôle administrateur' });
+    }
+
     const result = await pool.query(
       `UPDATE utilisateurs
        SET role = $1
@@ -143,6 +155,10 @@ router.put('/role/:id', async (req, res) => {
 router.put('/suspendre/:id', async (req, res) => {
   try {
     const { id } = req.params;
+
+    if (Number(id) === req.utilisateur.id) {
+      return res.status(400).json({ error: 'Vous ne pouvez pas suspendre votre propre compte' });
+    }
 
     const result = await pool.query(
       `UPDATE utilisateurs
@@ -199,6 +215,10 @@ router.put('/reactiver/:id', async (req, res) => {
 router.delete('/utilisateurs/:id', async (req, res) => {
   try {
     const { id } = req.params;
+
+    if (Number(id) === req.utilisateur.id) {
+      return res.status(400).json({ error: 'Vous ne pouvez pas supprimer votre propre compte' });
+    }
 
     const result = await pool.query(
       'DELETE FROM utilisateurs WHERE id = $1 RETURNING id',

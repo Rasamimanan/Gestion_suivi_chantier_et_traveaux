@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { getToken, removeToken, removeUser } from './storage';
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.1.1.28:3000/api';
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.43.220:3000/api';
 console.log("BASE_URL =", BASE_URL);
 const api = axios.create({ baseURL: BASE_URL, timeout: 15000 });
 
@@ -29,7 +29,20 @@ export const login = (data) => api.post('/auth/login', data);
 export const register = (data) => api.post('/auth/register', data);
 export const getMe = () => api.get('/auth/me');
 export const changePassword = (data) => api.put('/auth/password', data);
+export const forgotPassword = (data) => api.post('/auth/forgot-password', data);
+export const confirmForgotPassword = (id) => api.post('/auth/forgot-password/confirm', { id });
+export const resetPassword = (data) => api.post('/auth/reset-password', data);
 
+// ADMIN - GESTION UTILISATEURS
+export const getAdminUsers = () => api.get('/admin/utilisateurs');
+export const getAdminPendingUsers = () => api.get('/admin/utilisateurs-en-attente');
+export const getAdminStats = () => api.get('/admin/stats');
+export const approveUser = (id) => api.post(`/admin/approuver/${id}`);
+export const rejectUser = (id) => api.post(`/admin/rejeter/${id}`);
+export const changeUserRole = (id, role) => api.put(`/admin/role/${id}`, { role });
+export const suspendUser = (id) => api.put(`/admin/suspendre/${id}`);
+export const reactivateUser = (id) => api.put(`/admin/reactiver/${id}`);
+export const deleteUserAdmin = (id) => api.delete(`/admin/utilisateurs/${id}`);
 // DASHBOARD
 export const getDashboard = () => api.get('/dashboard');
 

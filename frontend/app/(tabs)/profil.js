@@ -1,14 +1,16 @@
+import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { changePassword } from '../../services/api';
 
 export default function ProfilScreen() {
+  const router = useRouter();
   const { user, logout } = useAuth();
   const [form, setForm] = useState({ ancien: '', nouveau: '', confirm: '' });
   const [saving, setSaving] = useState(false);
 
-  const ROLE_LABEL = { admin: '👑 Administrateur', chef_projet: '🎯 Chef de projet', utilisateur: '👤 Utilisateur' };
+  const ROLE_LABEL = { admin: '👑 Administrateur', chef_chantier: '🎯 Chef de chantier', utilisateur: '👤 Utilisateur' };
 
   const handlePassword = async () => {
     if (!form.ancien || !form.nouveau || !form.confirm) { Alert.alert('Erreur', 'Remplissez tous les champs.'); return; }
@@ -26,7 +28,6 @@ export default function ProfilScreen() {
 
   return (
     <ScrollView className="flex-1 bg-gray-50" contentContainerStyle={{ padding: 16 }}>
-      {/* Carte profil */}
       <View className="bg-blue-600 rounded-2xl p-6 mb-5 items-center">
         <View className="bg-white w-20 h-20 rounded-full items-center justify-center mb-3">
           <Text className="text-blue-600 text-3xl font-bold">{user?.nom?.[0]}{user?.prenom?.[0]}</Text>
@@ -38,7 +39,6 @@ export default function ProfilScreen() {
         </View>
       </View>
 
-      {/* Changer mot de passe */}
       <View className="bg-white rounded-2xl p-5 mb-5 shadow-sm border border-gray-100">
         <Text className="text-lg font-bold text-gray-800 mb-4">Changer le mot de passe</Text>
         {[['Ancien mot de passe', 'ancien'], ['Nouveau mot de passe', 'nouveau'], ['Confirmer le nouveau', 'confirm']].map(([label, field]) => (
@@ -62,7 +62,19 @@ export default function ProfilScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Déconnexion */}
+      {user?.role === 'admin' && (
+        <TouchableOpacity
+          className="bg-blue-600 rounded-2xl p-5 mb-5 flex-row items-center justify-between"
+          onPress={() => router.push('/admin/utilisateurs')}
+        >
+          <View>
+            <Text className="text-white font-bold text-base">⚙️ Gestion des utilisateurs</Text>
+            <Text className="text-blue-100 text-xs mt-1">Valider, suspendre, changer les rôles</Text>
+          </View>
+          <Text className="text-white text-xl">›</Text>
+        </TouchableOpacity>
+      )}
+
       <TouchableOpacity
         className="bg-red-500 py-4 rounded-2xl items-center"
         onPress={() => Alert.alert('Déconnexion', 'Confirmer ?', [

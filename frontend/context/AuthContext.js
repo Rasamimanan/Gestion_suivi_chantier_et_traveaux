@@ -16,7 +16,6 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  /* ================= LOAD SESSION ================= */
   useEffect(() => {
     const init = async () => {
       try {
@@ -37,44 +36,34 @@ export function AuthProvider({ children }) {
     init();
   }, []);
 
-  /* ================= LOGIN ================= */
   const login = async (email, password) => {
-    const res = await apiLogin({
-      email: email.trim().toLowerCase(),
-      password,
-    });
-
+    const res = await apiLogin({ email: email.trim().toLowerCase(), password });
     const data = res.data;
 
     if (!data?.token || !data?.utilisateur) {
       throw new Error('Réponse backend invalide');
     }
 
-    await Promise.all([
-      saveToken(data.token),
-      saveUser(data.utilisateur),
-    ]);
-
+    await Promise.all([saveToken(data.token), saveUser(data.utilisateur)]);
     setToken(data.token);
     setUser(data.utilisateur);
 
     return data;
   };
 
-  /* ================= REGISTER ================= */
+  // ⚠️ le compte créé reste 'en_attente' tant que l'admin n'a pas validé le compte.
   const register = async (payload) => {
     const res = await apiRegister({
       nom: payload.nom,
       prenom: payload.prenom,
       email: payload.email.trim().toLowerCase(),
-      password: payload.password, // ⚠️ IMPORTANT: backend attend password
+      password: payload.password,
       role: payload.role || 'utilisateur',
     });
 
     return res.data;
   };
 
-  /* ================= LOGOUT ================= */
   const logout = async () => {
     await Promise.all([removeToken(), removeUser()]);
     setToken(null);
@@ -83,15 +72,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{
-        user,
-        token,
-        loading,
-        login,
-        register,
-        logout,
-        isAuthenticated: !!token,
-      }}
+      value={{ user, token, loading, login, register, logout, isAuthenticated: !!token }}
     >
       {children}
     </AuthContext.Provider>

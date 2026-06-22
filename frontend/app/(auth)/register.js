@@ -6,7 +6,8 @@ import {
   ScrollView,
   Text,
   TextInput,
-  TouchableOpacity
+  TouchableOpacity,
+  View
 } from 'react-native';
 
 import { useAuth } from '../../context/AuthContext';
@@ -21,6 +22,7 @@ export default function RegisterScreen() {
     email: '',
     password: '',
     confirm: '',
+    role: 'utilisateur',
   });
 
   const [loading, setLoading] = useState(false);
@@ -44,11 +46,12 @@ export default function RegisterScreen() {
         prenom: form.prenom.trim(),
         email: form.email.trim().toLowerCase(),
         password: form.password,
+        role: form.role,
       });
 
       Alert.alert(
-        'Succès',
-        res?.message || 'Compte créé avec succès'
+        'Compte créé',
+        res?.message || 'Votre compte est en attente de validation par un administrateur'
       );
 
       router.replace('/(auth)/login');
@@ -113,6 +116,25 @@ export default function RegisterScreen() {
         onChangeText={(v) => setForm({ ...form, confirm: v })}
       />
 
+      {/* ROLE */}
+      <Text style={{ fontWeight: '600', marginBottom: 8, marginTop: 4 }}>
+        Je m'inscris en tant que
+      </Text>
+      <View style={{ flexDirection: 'row', marginBottom: 15 }}>
+        {ROLES_DISPONIBLES.map((r) => (
+          <TouchableOpacity
+            key={r.value}
+            onPress={() => setForm({ ...form, role: r.value })}
+            style={roleBtn(form.role === r.value)}
+          >
+            <Text style={roleBtnText(form.role === r.value)}>{r.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <Text style={{ color: '#888', fontSize: 12, marginBottom: 15, marginTop: -8 }}>
+        Le rôle sera confirmé par un administrateur lors de la validation du compte.
+      </Text>
+
       {/* BUTTON */}
       <TouchableOpacity
         style={button(loading)}
@@ -132,6 +154,14 @@ export default function RegisterScreen() {
   );
 }
 
+/* ================= ROLES ================= */
+// ⚠️ le rôle "admin" n'est jamais proposé ici : il ne peut être
+// attribué que par un administrateur depuis l'écran de gestion des utilisateurs.
+const ROLES_DISPONIBLES = [
+  { value: 'utilisateur', label: '👤 Utilisateur' },
+  { value: 'chef_chantier', label: '🎯 Chef de chantier' },
+];
+
 /* ================= STYLE ================= */
 const input = {
   borderWidth: 1,
@@ -147,4 +177,20 @@ const button = (loading) => ({
   borderRadius: 10,
   alignItems: 'center',
   marginTop: 10,
+});
+
+const roleBtn = (active) => ({
+  flex: 1,
+  borderWidth: 1,
+  borderColor: active ? '#2563eb' : '#ddd',
+  backgroundColor: active ? '#2563eb' : '#fff',
+  borderRadius: 10,
+  paddingVertical: 12,
+  marginRight: 8,
+  alignItems: 'center',
+});
+
+const roleBtnText = (active) => ({
+  color: active ? '#fff' : '#444',
+  fontWeight: '600',
 });

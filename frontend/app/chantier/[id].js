@@ -113,9 +113,9 @@ export default function ChantierDetail() {
         </TouchableOpacity>
         <TouchableOpacity
           className="bg-green-600 py-4 rounded-2xl items-center"
-          onPress={() => router.push(`/chantier/${id}/depenses`)}
+          onPress={() => router.push(`/chantier/${id}/budget`)}
         >
-          <Text className="text-white font-bold">💰 Suivi des dépenses</Text>
+          <Text className="text-white font-bold">💰 Suivi du budget</Text>
         </TouchableOpacity>
         <TouchableOpacity
           className="bg-white py-4 rounded-2xl items-center border border-blue-200"
