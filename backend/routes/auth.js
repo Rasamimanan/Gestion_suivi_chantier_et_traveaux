@@ -263,7 +263,38 @@ router.post('/reset-password', async (req, res) => {
     return res.status(500).json({ error: 'Erreur serveur' });
   }
 });
+// ================= CHANGER MOT DE PASSE (connecté) =================
+router.put('/password', authenticateToken, async (req, res) => {
+  try {
+    const { ancien_mot_de_passe, nouveau_mot_de_passe } = req.body;
 
+    if (!ancien_mot_de_passe || !nouveau_mot_de_passe) {
+      return res.status(400).json({ error: 'Ancien et nouveau mot de passe requis' });
+    }
+    if (nouveau_mot_de_passe.length < 6) {
+      return res.status(400).json({ error: 'Minimum 6 caractères' });
+    }
+
+    const result = await pool.query(
+      'SELECT password FROM utilisateurs WHERE id = $1',
+      [req.utilisateur.id]
+    );
+
+    const isValid = await bcryptjs.compare(ancien_mot_de_passe, result.rows[0].password);
+    if (!isValid) {
+      return res.status(401).json({ error: 'Ancien mot de passe incorrect' });
+    }
+
+    const hash = await bcryptjs.hash(nouveau_mot_de_passe, 10);
+    await pool.query('UPDATE utilisateurs SET password = $1 WHERE id = $2', [hash, req.utilisateur.id]);
+
+    return res.json({ message: 'Mot de passe modifié avec succès' });
+
+  } catch (err) {
+    console.error('CHANGE PASSWORD ERROR:', err);
+    return res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
 // ================= ME =================
 router.get('/me', authenticateToken, async (req, res) => {
   try {

@@ -1,65 +1,90 @@
 import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Image, Modal, ScrollView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Image,
+  Modal,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { deletePhoto, getEtape, getPhotos, updateEtape, uploadPhoto } from '../../services/api';
+
+// ✅ FIX : URL du serveur dérivée de la variable d'environnement
+// 'http://10.x.x.x:3000/api' → 'http://10.x.x.x:3000'
+// 'http://localhost:3000' ne fonctionne JAMAIS sur un vrai téléphone
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.43.220:3000/api';
+const SERVER_BASE = API_URL.replace(/\/api$/, '');
+
+function getPhotoUrl(urlFromDb) {
+  if (!urlFromDb) return null;
+  if (urlFromDb.startsWith('http')) return urlFromDb;
+  const clean = urlFromDb.startsWith('/') ? urlFromDb : `/${urlFromDb}`;
+  return `${SERVER_BASE}${clean}`;
+}
+
+const STATUTS = [
+  { value: 'non_commence', label: 'Non commencé', color: '#9ca3af', bg: '#f3f4f6' },
+  { value: 'en_cours',     label: 'En cours',     color: '#3b82f6', bg: '#eff6ff' },
+  { value: 'termine',      label: 'Terminé',       color: '#22c55e', bg: '#f0fdf4' },
+];
 
 export default function EtapeDetail() {
   const { id } = useLocalSearchParams();
-  const [etape, setEtape] = useState(null);
-  const [photos, setPhotos] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [statutModalVisible, setStatutModalVisible] = useState(false);
-  const [photoModalVisible, setPhotoModalVisible] = useState(false);
-  const [updating, setUpdating] = useState(false);
-  const [selectedImage, setSelectedImage] = useState(null);
-  const [photoDescription, setPhotoDescription] = useState('');
-  const [uploading, setUploading] = useState(false);
+  const [etape,              setEtape]              = useState(null);
+  const [photos,             setPhotos]             = useState([]);
+  const [loading,            setLoading]            = useState(true);
+  const [statutModal,        setStatutModal]        = useState(false);
+  const [photoModal,         setPhotoModal]         = useState(false);
+  const [updating,           setUpdating]           = useState(false);
+  const [selectedImage,      setSelectedImage]      = useState(null);
+  const [photoDescription,   setPhotoDescription]   = useState('');
+  const [uploading,          setUploading]          = useState(false);
 
-  // API URL - À adapter selon votre configuration
-  const API_BASE_URL = 'http://localhost:3000';
+  useEffect(() => { loadData(); }, [id]);
 
-  useEffect(() => {
-    loadData();
-  }, [id]);
-
+  /* ─── chargement ─── */
   const loadData = async () => {
     try {
-      const [etapeRes, photosRes] = await Promise.all([
-        getEtape(id),
-        getPhotos(id)
-      ]);
+      const [etapeRes, photosRes] = await Promise.all([getEtape(id), getPhotos(id)]);
       setEtape(etapeRes.data);
       setPhotos(photosRes.data);
-      console.log('Photos chargées:', photosRes.data);
-    } catch (error) {
-      console.error('Erreur chargement:', error);
+    } catch {
       Alert.alert('Erreur', 'Impossible de charger les données');
     } finally {
       setLoading(false);
     }
   };
 
+  /* ─── statut ─── */
   const handleChangeStatut = async (newStatut) => {
     setUpdating(true);
     try {
-      const updated = {
-        ...etape,
-        statut: newStatut
-      };
-      await updateEtape(id, updated);
-      setEtape(updated);
-      setStatutModalVisible(false);
-    } catch (error) {
-      console.error('Erreur statut:', error);
+      await updateEtape(id, { ...etape, statut: newStatut });
+      setEtape({ ...etape, statut: newStatut });
+      setStatutModal(false);
+    } catch {
       Alert.alert('Erreur', 'Impossible de modifier le statut');
     } finally {
       setUpdating(false);
     }
   };
 
+  /* ─── galerie ─── */
   const pickImage = async () => {
     try {
+      // ✅ permission obligatoire sur Android
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission refusée', "L'accès à la galerie est nécessaire.");
+        return;
+      }
+
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
@@ -67,115 +92,66 @@ export default function EtapeDetail() {
         quality: 0.7,
       });
 
-      if (!result.canceled) {
+      if (!result.canceled && result.assets?.length > 0) {
         setSelectedImage(result.assets[0].uri);
         setPhotoDescription('');
-        setPhotoModalVisible(true);
+        setPhotoModal(true);
       }
-    } catch (error) {
-      console.error('Erreur sélection image:', error);
+    } catch {
       Alert.alert('Erreur', 'Impossible de sélectionner une image');
     }
   };
 
+  /* ─── upload ─── */
   const handleUploadPhoto = async () => {
-    if (!selectedImage) {
-      Alert.alert('Erreur', 'Aucune image sélectionnée');
-      return;
-    }
+    if (!selectedImage) { Alert.alert('Erreur', 'Aucune image sélectionnée'); return; }
 
     setUploading(true);
     try {
-      const formData = new FormData();
-      formData.append('etape_id', id);
-      formData.append('description', photoDescription || '');
-      formData.append('photo', {
-        uri: selectedImage,
-        type: 'image/jpeg',
-        name: `photo_${Date.now()}.jpg`
-      });
+      // ✅ extension et MIME type réels de l'image
+      const ext      = selectedImage.split('.').pop()?.toLowerCase() || 'jpg';
+      const mimeType = ext === 'png' ? 'image/png' : ext === 'gif' ? 'image/gif' : 'image/jpeg';
 
-      console.log('Upload en cours...');
+      const formData = new FormData();
+      formData.append('etape_id',    String(id));
+      formData.append('description', photoDescription || '');
+      formData.append('photo', { uri: selectedImage, type: mimeType, name: `photo_${Date.now()}.${ext}` });
+
       const response = await uploadPhoto(formData);
-      
-      console.log('Response upload:', response.data);
-      
-      // Ajouter à la liste
       setPhotos([response.data, ...photos]);
-      setPhotoModalVisible(false);
+      setPhotoModal(false);
       setSelectedImage(null);
       setPhotoDescription('');
-      
       Alert.alert('Succès', 'Photo ajoutée avec succès');
     } catch (error) {
-      console.error('Erreur upload:', error);
-      Alert.alert('Erreur', 'Impossible d\'ajouter la photo');
+      Alert.alert('Erreur', error?.response?.data?.error || "Impossible d'ajouter la photo");
     } finally {
       setUploading(false);
     }
   };
 
-  const handleDeletePhoto = async (photoId) => {
-    Alert.alert(
-      'Supprimer la photo',
-      'Êtes-vous sûr?',
-      [
-        {
-          text: 'Annuler',
-          style: 'cancel'
-        },
-        {
-          text: 'Supprimer',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deletePhoto(photoId);
-              setPhotos(photos.filter(p => p.id !== photoId));
-              Alert.alert('Succès', 'Photo supprimée');
-            } catch (error) {
-              Alert.alert('Erreur', 'Impossible de supprimer la photo');
-            }
+  /* ─── suppression ─── */
+  const handleDeletePhoto = (photoId) => {
+    Alert.alert('Supprimer la photo', 'Êtes-vous sûr ?', [
+      { text: 'Annuler', style: 'cancel' },
+      {
+        text: 'Supprimer', style: 'destructive',
+        onPress: async () => {
+          try {
+            await deletePhoto(photoId);
+            setPhotos(photos.filter(p => p.id !== photoId));
+          } catch {
+            Alert.alert('Erreur', 'Impossible de supprimer la photo');
           }
-        }
-      ]
-    );
+        },
+      },
+    ]);
   };
 
-  const getPhotoUrl = (urlFromDb) => {
-    if (!urlFromDb) return null;
-    
-    // Si c'est déjà une URL complète
-    if (urlFromDb.startsWith('http')) {
-      return urlFromDb;
-    }
-    
-    // Si c'est un chemin relatif
-    if (urlFromDb.startsWith('/uploads')) {
-      return `${API_BASE_URL}${urlFromDb}`;
-    }
-    
-    // Sinon ajouter /uploads/
-    return `${API_BASE_URL}/uploads/${urlFromDb}`;
-  };
+  /* ─── helpers ─── */
+  const getStatut = (val) => STATUTS.find(s => s.value === val) || STATUTS[0];
 
-  const getStatutColor = (statut) => {
-    switch (statut) {
-      case 'non_commence': return 'bg-gray-400';
-      case 'en_cours': return 'bg-blue-500';
-      case 'termine': return 'bg-green-500';
-      default: return 'bg-gray-500';
-    }
-  };
-
-  const getStatutText = (statut) => {
-    switch (statut) {
-      case 'non_commence': return 'Non commencé';
-      case 'en_cours': return 'En cours';
-      case 'termine': return 'Terminé';
-      default: return statut;
-    }
-  };
-
+  /* ─── loading ─── */
   if (loading) {
     return (
       <View className="flex-1 justify-center items-center bg-gray-50">
@@ -184,50 +160,38 @@ export default function EtapeDetail() {
     );
   }
 
+  const statut = getStatut(etape?.statut);
+
   return (
     <View className="flex-1 bg-gray-50">
-      {/* Info de l'étape */}
-      <View className="bg-white p-4 border-b border-gray-200">
-        <View className="flex-row justify-between items-start mb-3">
-          <View className="flex-1">
-            <Text className="text-xl font-bold text-gray-800 mb-1">
-              {etape?.titre}
-            </Text>
-            {etape?.description && (
-              <Text className="text-gray-600 text-sm">{etape.description}</Text>
-            )}
-          </View>
-        </View>
 
-        {/* Bouton Statut - Cliquable pour modifier */}
+      {/* ══════════ INFO ÉTAPE ══════════ */}
+      <View className="bg-white p-4 border-b border-gray-200">
+
+        <Text className="text-xl font-bold text-gray-800 mb-1">{etape?.titre}</Text>
+        {etape?.description ? (
+          <Text className="text-gray-500 text-sm mb-3">{etape.description}</Text>
+        ) : null}
+
+        {/* Bouton statut */}
         <TouchableOpacity
-          onPress={() => setStatutModalVisible(true)}
-          className={`${getStatutColor(etape?.statut)} px-4 py-2 rounded-full mb-3 flex-row items-center justify-center`}
+          onPress={() => setStatutModal(true)}
+          style={{ backgroundColor: statut.color }}
+          className="px-4 py-2 rounded-full mb-3 flex-row items-center justify-center self-start"
         >
-          <Text className="text-white text-sm font-semibold">
-            {getStatutText(etape?.statut)}
-          </Text>
-          <Text className="text-white ml-2">→</Text>
+          <Text className="text-white text-sm font-semibold">{statut.label}</Text>
+          <Text className="text-white ml-2 text-xs">▼</Text>
         </TouchableOpacity>
 
         {/* Intervenants */}
-        {etape?.intervenants && etape.intervenants.length > 0 && (
-          <View className="mb-3">
-            <Text className="text-sm font-semibold text-gray-700 mb-2">
-              Intervenants:
-            </Text>
-            <View className="flex-row flex-wrap gap-2">
-              {etape.intervenants.map((intervenant) => (
-                <View 
-                  key={intervenant.id}
-                  className="bg-blue-50 px-3 py-2 rounded-lg"
-                >
-                  <Text className="text-blue-800 text-xs">
-                    👤 {intervenant.nom} {intervenant.prenom}
-                  </Text>
-                  <Text className="text-blue-600 text-xs">
-                    {intervenant.role}
-                  </Text>
+        {etape?.intervenants?.length > 0 && (
+          <View className="mb-2">
+            <Text className="text-xs font-semibold text-gray-600 mb-1">Intervenants :</Text>
+            <View className="flex-row flex-wrap" style={{ gap: 6 }}>
+              {etape.intervenants.map(i => (
+                <View key={i.id} className="bg-blue-50 border border-blue-100 px-3 py-1 rounded-full">
+                  <Text className="text-blue-700 text-xs">👤 {i.nom} {i.prenom}</Text>
+                  {i.role ? <Text className="text-blue-500 text-xs">{i.role}</Text> : null}
                 </View>
               ))}
             </View>
@@ -235,26 +199,22 @@ export default function EtapeDetail() {
         )}
 
         {/* Dates */}
-        {etape?.date_debut && (
-          <Text className="text-gray-500 text-xs">
+        {etape?.date_debut ? (
+          <Text className="text-gray-400 text-xs">
             📅 {new Date(etape.date_debut).toLocaleDateString('fr-FR')}
-            {etape.date_fin && 
-              ` → ${new Date(etape.date_fin).toLocaleDateString('fr-FR')}`
-            }
+            {etape.date_fin ? ` → ${new Date(etape.date_fin).toLocaleDateString('fr-FR')}` : ''}
           </Text>
-        )}
+        ) : null}
       </View>
 
-      {/* Section Photos */}
+      {/* ══════════ PHOTOS ══════════ */}
       <View className="flex-1 p-4">
+
         <View className="flex-row justify-between items-center mb-3">
-          <Text className="text-lg font-semibold text-gray-700">
+          <Text className="text-base font-semibold text-gray-700">
             Photos ({photos.length})
           </Text>
-          <TouchableOpacity
-            onPress={pickImage}
-            className="bg-blue-500 px-4 py-2 rounded-lg"
-          >
+          <TouchableOpacity onPress={pickImage} className="bg-blue-500 px-4 py-2 rounded-lg">
             <Text className="text-white font-semibold text-sm">+ Ajouter</Text>
           </TouchableOpacity>
         </View>
@@ -263,54 +223,39 @@ export default function EtapeDetail() {
           <FlatList
             data={photos}
             numColumns={2}
-            keyExtractor={(item) => item.id.toString()}
-            columnWrapperStyle={{ gap: 12 }}
-            contentContainerStyle={{ gap: 12 }}
+            keyExtractor={item => item.id.toString()}
+            columnWrapperStyle={{ gap: 10 }}
+            contentContainerStyle={{ gap: 10, paddingBottom: 20 }}
             renderItem={({ item }) => {
               const photoUrl = getPhotoUrl(item.url);
-              
               return (
-                <View className="flex-1 bg-white rounded-lg overflow-hidden shadow-sm">
-                  {/* Image avec gestion d'erreur */}
+                <View style={{ flex: 1, backgroundColor: '#fff', borderRadius: 10, overflow: 'hidden', elevation: 1 }}>
+
+                  {/* ✅ style inline pour dimensions fixes — className seul ne marche pas sur Image */}
                   {photoUrl ? (
                     <Image
                       source={{ uri: photoUrl }}
-                      className="w-full h-40 bg-gray-200"
+                      style={{ width: '100%', height: 150, backgroundColor: '#e5e7eb' }}
                       resizeMode="cover"
-                      onError={(e) => {
-                        console.log('Erreur chargement image:', photoUrl);
-                        console.log('Error details:', e.nativeEvent.error);
-                      }}
-                      onLoad={() => {
-                        console.log('Image chargée:', photoUrl);
-                      }}
+                      onError={() => console.warn('Image non chargée :', photoUrl)}
                     />
                   ) : (
-                    <View className="w-full h-40 bg-gray-300 justify-center items-center">
-                      <Text className="text-gray-600 text-xs">📷 Pas d'image</Text>
-                    </View>
-                  )}
-                  
-                  {/* Légende */}
-                  {item.description && (
-                    <View className="bg-gray-50 p-2 border-t border-gray-100">
-                      <Text className="text-gray-700 text-xs font-semibold mb-1">
-                        Légende:
-                      </Text>
-                      <Text className="text-gray-600 text-xs" numberOfLines={2}>
-                        {item.description}
-                      </Text>
+                    <View style={{ width: '100%', height: 150, backgroundColor: '#d1d5db', justifyContent: 'center', alignItems: 'center' }}>
+                      <Text style={{ color: '#6b7280', fontSize: 12 }}>📷 Indisponible</Text>
                     </View>
                   )}
 
-                  {/* Bouton supprimer */}
+                  {item.description ? (
+                    <View style={{ padding: 6, borderTopWidth: 1, borderTopColor: '#f3f4f6' }}>
+                      <Text style={{ color: '#4b5563', fontSize: 11 }} numberOfLines={2}>{item.description}</Text>
+                    </View>
+                  ) : null}
+
                   <TouchableOpacity
                     onPress={() => handleDeletePhoto(item.id)}
-                    className="bg-red-50 p-2 flex-row items-center justify-center border-t border-gray-100"
+                    style={{ padding: 8, borderTopWidth: 1, borderTopColor: '#fee2e2', backgroundColor: '#fff5f5', alignItems: 'center' }}
                   >
-                    <Text className="text-red-600 text-xs font-semibold">
-                      🗑️ Supprimer
-                    </Text>
+                    <Text style={{ color: '#dc2626', fontSize: 11, fontWeight: '600' }}>🗑️ Supprimer</Text>
                   </TouchableOpacity>
                 </View>
               );
@@ -318,204 +263,133 @@ export default function EtapeDetail() {
           />
         ) : (
           <View className="items-center justify-center py-20">
-            <Text className="text-gray-400 mb-2">Aucune photo</Text>
-            <Text className="text-gray-400 text-sm">
-              Appuyez sur + Ajouter pour commencer
-            </Text>
+            <Text className="text-4xl mb-3">📷</Text>
+            <Text className="text-gray-400 font-medium">Aucune photo</Text>
+            <Text className="text-gray-300 text-sm mt-1">Appuyez sur + Ajouter pour commencer</Text>
           </View>
         )}
       </View>
 
-      {/* Modal Modification Statut */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={statutModalVisible}
-        onRequestClose={() => setStatutModalVisible(false)}
-      >
-        <View className="flex-1 bg-black/50 justify-end">
-          <View className="bg-white rounded-t-3xl p-6">
-            <Text className="text-xl font-bold text-gray-800 mb-4">
+      {/* ══════════ MODAL STATUT ══════════ */}
+      <Modal animationType="slide" transparent visible={statutModal} onRequestClose={() => setStatutModal(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+          <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24 }}>
+
+            <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#1f2937', marginBottom: 6 }}>
               Changer le statut
             </Text>
-
-            <Text className="text-sm text-gray-600 mb-4">
-              Statut actuel: <Text className="font-bold">{getStatutText(etape?.statut)}</Text>
+            <Text style={{ color: '#6b7280', fontSize: 13, marginBottom: 16 }}>
+              Statut actuel : <Text style={{ fontWeight: 'bold', color: statut.color }}>{statut.label}</Text>
             </Text>
 
-            <ScrollView className="mb-4">
-              {/* Non commencé */}
+            {STATUTS.map(s => (
               <TouchableOpacity
-                onPress={() => handleChangeStatut('non_commence')}
+                key={s.value}
+                onPress={() => handleChangeStatut(s.value)}
                 disabled={updating}
-                className={`p-4 rounded-lg mb-2 flex-row items-center ${
-                  etape?.statut === 'non_commence' 
-                    ? 'bg-gray-200' 
-                    : 'bg-gray-50 border border-gray-200'
-                }`}
+                style={{
+                  flexDirection: 'row', alignItems: 'center',
+                  padding: 14, borderRadius: 12, marginBottom: 8,
+                  backgroundColor: etape?.statut === s.value ? s.bg : '#f9fafb',
+                  borderWidth: 1,
+                  borderColor: etape?.statut === s.value ? s.color : '#e5e7eb',
+                }}
               >
-                <View className="w-4 h-4 rounded-full bg-gray-400 mr-3" />
-                <View className="flex-1">
-                  <Text className="font-semibold text-gray-800">Non commencé</Text>
-                  <Text className="text-gray-500 text-xs">L'étape n'a pas commencé</Text>
+                <View style={{ width: 16, height: 16, borderRadius: 8, backgroundColor: s.color, marginRight: 12 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontWeight: '600', color: '#1f2937' }}>{s.label}</Text>
                 </View>
-                {etape?.statut === 'non_commence' && (
-                  <Text className="text-green-500 font-bold">✓</Text>
+                {etape?.statut === s.value && (
+                  <Text style={{ color: s.color, fontWeight: 'bold' }}>✓</Text>
                 )}
               </TouchableOpacity>
+            ))}
 
-              {/* En cours */}
-              <TouchableOpacity
-                onPress={() => handleChangeStatut('en_cours')}
-                disabled={updating}
-                className={`p-4 rounded-lg mb-2 flex-row items-center ${
-                  etape?.statut === 'en_cours' 
-                    ? 'bg-blue-50' 
-                    : 'bg-gray-50 border border-gray-200'
-                }`}
-              >
-                <View className="w-4 h-4 rounded-full bg-blue-500 mr-3" />
-                <View className="flex-1">
-                  <Text className="font-semibold text-gray-800">En cours</Text>
-                  <Text className="text-gray-500 text-xs">L'étape est en cours de réalisation</Text>
-                </View>
-                {etape?.statut === 'en_cours' && (
-                  <Text className="text-green-500 font-bold">✓</Text>
-                )}
-              </TouchableOpacity>
-
-              {/* Terminé */}
-              <TouchableOpacity
-                onPress={() => handleChangeStatut('termine')}
-                disabled={updating}
-                className={`p-4 rounded-lg mb-2 flex-row items-center ${
-                  etape?.statut === 'termine' 
-                    ? 'bg-green-50' 
-                    : 'bg-gray-50 border border-gray-200'
-                }`}
-              >
-                <View className="w-4 h-4 rounded-full bg-green-500 mr-3" />
-                <View className="flex-1">
-                  <Text className="font-semibold text-gray-800">Terminé</Text>
-                  <Text className="text-gray-500 text-xs">L'étape est terminée</Text>
-                </View>
-                {etape?.statut === 'termine' && (
-                  <Text className="text-green-500 font-bold">✓</Text>
-                )}
-              </TouchableOpacity>
-            </ScrollView>
-
-            {/* Boutons */}
-            <View className="flex-row gap-3">
-              <TouchableOpacity
-                onPress={() => setStatutModalVisible(false)}
-                disabled={updating}
-                className="flex-1 bg-gray-200 p-3 rounded-lg"
-              >
-                <Text className="text-gray-800 text-center font-semibold">
-                  Annuler
-                </Text>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity
+              onPress={() => setStatutModal(false)}
+              disabled={updating}
+              style={{ marginTop: 8, backgroundColor: '#f3f4f6', padding: 14, borderRadius: 12, alignItems: 'center' }}
+            >
+              <Text style={{ color: '#374151', fontWeight: '600' }}>Annuler</Text>
+            </TouchableOpacity>
 
             {updating && (
-              <View className="mt-3 flex-row justify-center">
+              <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 12 }}>
                 <ActivityIndicator color="#3b82f6" />
-                <Text className="ml-2 text-gray-600">Mise à jour...</Text>
+                <Text style={{ marginLeft: 8, color: '#6b7280' }}>Mise à jour...</Text>
               </View>
             )}
           </View>
         </View>
       </Modal>
 
-      {/* Modal Ajouter Photo avec Légende */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={photoModalVisible}
-        onRequestClose={() => setPhotoModalVisible(false)}
-      >
-        <View className="flex-1 bg-black/50 justify-end">
-          <View className="bg-white rounded-t-3xl p-6 max-h-4/5">
-            <Text className="text-xl font-bold text-gray-800 mb-4">
+      {/* ══════════ MODAL AJOUT PHOTO ══════════ */}
+      <Modal animationType="slide" transparent visible={photoModal} onRequestClose={() => setPhotoModal(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' }}>
+          <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, maxHeight: '85%' }}>
+
+            <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#1f2937', marginBottom: 16 }}>
               Ajouter une photo
             </Text>
 
-            <ScrollView className="mb-4">
-              {/* Aperçu de l'image */}
-              {selectedImage && (
-                <View className="mb-4">
-                  <Image
-                    source={{ uri: selectedImage }}
-                    className="w-full h-64 rounded-lg"
-                    resizeMode="cover"
-                  />
-                  <Text className="text-gray-500 text-xs text-center mt-2">
-                    Image redimensionnée automatiquement
-                  </Text>
-                </View>
-              )}
+            <ScrollView showsVerticalScrollIndicator={false} style={{ marginBottom: 16 }}>
 
-              {/* Champ description */}
-              <View className="mb-4">
-                <Text className="text-gray-700 font-semibold mb-2">
-                  Légende (optionnel)
-                </Text>
-                <TextInput
-                  value={photoDescription}
-                  onChangeText={setPhotoDescription}
-                  placeholder="Ex: Vue d'ensemble des fondations..."
-                  multiline
-                  numberOfLines={3}
-                  maxLength={200}
-                  className="bg-gray-50 p-3 rounded-lg border border-gray-200"
-                  textAlignVertical="top"
+              {/* Aperçu */}
+              {selectedImage ? (
+                <Image
+                  source={{ uri: selectedImage }}
+                  style={{ width: '100%', height: 220, borderRadius: 12, marginBottom: 16, backgroundColor: '#e5e7eb' }}
+                  resizeMode="cover"
                 />
-                <Text className="text-gray-400 text-xs mt-1">
-                  {photoDescription.length}/200 caractères
-                </Text>
-              </View>
+              ) : null}
 
-              {/* Info */}
-              <View className="bg-blue-50 p-3 rounded-lg mb-4">
-                <Text className="text-blue-800 text-xs">
-                  💡 Astuce: Ajoutez une description pour mémoriser les détails de la photo
-                </Text>
-              </View>
+              {/* Légende */}
+              <Text style={{ fontSize: 13, fontWeight: '600', color: '#374151', marginBottom: 6 }}>
+                Légende (optionnel)
+              </Text>
+              <TextInput
+                value={photoDescription}
+                onChangeText={setPhotoDescription}
+                placeholder="Ex: Vue d'ensemble des fondations..."
+                multiline
+                numberOfLines={3}
+                maxLength={200}
+                textAlignVertical="top"
+                style={{
+                  backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb',
+                  borderRadius: 10, padding: 12, fontSize: 13, color: '#1f2937', minHeight: 80,
+                }}
+              />
+              <Text style={{ color: '#9ca3af', fontSize: 11, marginTop: 4 }}>
+                {photoDescription.length}/200 caractères
+              </Text>
             </ScrollView>
 
             {/* Boutons */}
-            <View className="flex-row gap-3">
+            <View style={{ flexDirection: 'row', gap: 10 }}>
               <TouchableOpacity
-                onPress={() => setPhotoModalVisible(false)}
+                onPress={() => { setPhotoModal(false); setSelectedImage(null); setPhotoDescription(''); }}
                 disabled={uploading}
-                className="flex-1 bg-gray-200 p-3 rounded-lg"
+                style={{ flex: 1, backgroundColor: '#f3f4f6', padding: 14, borderRadius: 12, alignItems: 'center' }}
               >
-                <Text className="text-gray-800 text-center font-semibold">
-                  Annuler
-                </Text>
+                <Text style={{ color: '#374151', fontWeight: '600' }}>Annuler</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 onPress={handleUploadPhoto}
                 disabled={uploading}
-                className="flex-1 bg-blue-500 p-3 rounded-lg"
+                style={{ flex: 1, backgroundColor: uploading ? '#93c5fd' : '#3b82f6', padding: 14, borderRadius: 12, alignItems: 'center' }}
               >
-                <Text className="text-white text-center font-semibold">
-                  {uploading ? 'Upload...' : 'Ajouter'}
-                </Text>
+                {uploading
+                  ? <ActivityIndicator color="#fff" />
+                  : <Text style={{ color: '#fff', fontWeight: '600' }}>Ajouter</Text>
+                }
               </TouchableOpacity>
             </View>
-
-            {uploading && (
-              <View className="mt-3 flex-row justify-center">
-                <ActivityIndicator color="#3b82f6" />
-                <Text className="ml-2 text-gray-600">Upload en cours...</Text>
-              </View>
-            )}
           </View>
         </View>
       </Modal>
+
     </View>
   );
 }
