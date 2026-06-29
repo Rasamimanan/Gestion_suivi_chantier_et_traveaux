@@ -6,6 +6,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
@@ -14,10 +15,44 @@ import {
 import { assignerIntervenant, createEtape, getIntervenants } from '../../services/api';
 
 const STATUTS = [
-  { value: 'non_commence', label: 'Non commencé' },
-  { value: 'en_cours',     label: 'En cours'     },
-  { value: 'termine',      label: 'Terminé'       },
+  { value: 'non_commence', label: '⏳ Non commencé' },
+  { value: 'en_cours',     label: '⚡ En cours'     },
+  { value: 'termine',      label: '✅ Terminé'       },
 ];
+
+// Validation du format de date (AAAA-MM-JJ)
+const DATE_REGEX = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+
+// Composant de champ personnalisé avec gestion des styles natifs
+const Field = ({ label, value, onChangeText, error, isRequired, ...props }) => {
+  const [isFocused, setIsFocused] = useState(false);
+
+  return (
+    <View style={styles.fieldContainer}>
+      <Text style={styles.label}>
+        {label} {isRequired && <Text style={{ color: '#ef4444' }}>*</Text>}
+      </Text>
+      <TextInput
+        style={[
+          styles.input,
+          isFocused && styles.inputFocused,
+          error && styles.inputError,
+        ]}
+        value={value}
+        onChangeText={onChangeText}
+        placeholderTextColor="#9ca3af"
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
+        {...props}
+      />
+      {error && (
+        <Text style={styles.errorText}>
+          ⚠️ {error}
+        </Text>
+      )}
+    </View>
+  );
+};
 
 export default function CreateEtape() {
   const { chantier_id } = useLocalSearchParams();
@@ -32,6 +67,7 @@ export default function CreateEtape() {
     date_fin:    '',
   });
 
+  const [errors, setErrors] = useState({});
   const [intervenants, setIntervenants] = useState([]);
   const [selected,     setSelected]     = useState([]);
   const [saving,       setSaving]       = useState(false);
@@ -45,9 +81,41 @@ export default function CreateEtape() {
   const toggleIntervenant = (id) =>
     setSelected(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
 
+  // Contrôle et validation des champs
+  const validateField = (field, value) => {
+    let errorMsg = '';
+
+    if (field === 'titre' && !value.trim()) {
+      errorMsg = 'Le titre est obligatoire.';
+    }
+
+    if (field === 'ordre' && value && isNaN(Number(value))) {
+      errorMsg = 'Veuillez saisir un nombre valide.';
+    }
+
+    if ((field === 'date_debut' || field === 'date_fin') && value.trim()) {
+      if (!DATE_REGEX.test(value)) {
+        errorMsg = 'Format invalide (attendu: AAAA-MM-JJ).';
+      }
+    }
+
+    setErrors(prev => ({ ...prev, [field]: errorMsg }));
+    return !errorMsg;
+  };
+
+  const updateForm = (field, value) => {
+    setForm(f => ({ ...f, [field]: value }));
+    validateField(field, value);
+  };
+
   const handleSave = async () => {
-    if (!form.titre.trim()) {
-      Alert.alert('Erreur', 'Le titre est obligatoire.');
+    const isTitreValid = validateField('titre', form.titre);
+    const isOrdreValid = validateField('ordre', form.ordre);
+    const isDebutValid = validateField('date_debut', form.date_debut);
+    const isFinValid = validateField('date_fin', form.date_fin);
+
+    if (!isTitreValid || !isOrdreValid || !isDebutValid || !isFinValid) {
+      Alert.alert('Attention', 'Veuillez corriger les erreurs dans le formulaire.');
       return;
     }
 
@@ -64,7 +132,6 @@ export default function CreateEtape() {
         description: form.description.trim(),
         statut:      form.statut,
         ordre:       parseInt(form.ordre, 10) || 1,
-        // ✅ colonnes réelles de la table etapes : date_debut et date_fin
         date_debut:  form.date_debut || null,
         date_fin:    form.date_fin   || null,
       };
@@ -72,165 +139,151 @@ export default function CreateEtape() {
       const res    = await createEtape(payload);
       const etapeId = res.data.id;
 
-      // Associer les intervenants sélectionnés
       if (selected.length > 0) {
         await Promise.all(selected.map(iid => assignerIntervenant(etapeId, iid)));
       }
 
       router.back();
-
     } catch (err) {
-      Alert.alert('Erreur', err?.response?.data?.error || 'Impossible de créer l\'étape.');
+      Alert.alert('Erreur', err?.response?.data?.error || "Impossible de créer l'étape.");
     } finally {
       setSaving(false);
     }
   };
 
-  // Composant champ de saisie réutilisable
-  const Field = ({ label, field, ...props }) => (
-    <View className="mb-4">
-      <Text className="text-sm font-semibold text-gray-600 mb-1">{label}</Text>
-      <TextInput
-        className="border border-gray-200 rounded-xl px-4 py-3 bg-white text-gray-800"
-        value={form[field]}
-        onChangeText={v => setForm(f => ({ ...f, [field]: v }))}
-        placeholderTextColor="#9ca3af"
-        {...props}
-      />
-    </View>
-  );
-
   return (
     <KeyboardAvoidingView
-      className="flex-1"
+      style={{ flex: 1, backgroundColor: '#f9fafb' }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView
-        className="flex-1 bg-gray-50"
-        contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+        style={{ flex: 1 }}
+        contentContainerStyle={{ padding: 16, paddingBottom: 50 }}
         keyboardShouldPersistTaps="handled"
       >
-        <View className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
+        <Text style={styles.pageTitle}>Nouvelle Étape</Text>
 
-          {/* ─── Champs texte ─── */}
+        <View style={styles.card}>
+          
           <Field
-            label="Titre *"
-            field="titre"
+            label="Titre"
+            value={form.titre}
+            onChangeText={v => updateForm('titre', v)}
             placeholder="Titre de l'étape"
+            error={errors.titre}
+            isRequired
             autoFocus
           />
 
           <Field
             label="Description"
-            field="description"
-            placeholder="Description (optionnel)"
+            value={form.description}
+            onChangeText={v => updateForm('description', v)}
+            placeholder="Ajouter des détails..."
             multiline
             numberOfLines={3}
             textAlignVertical="top"
-            style={{ minHeight: 70 }}
+            style={[styles.input, { minHeight: 80 }]}
           />
 
           <Field
             label="Ordre d'affichage"
-            field="ordre"
+            value={form.ordre}
+            onChangeText={v => updateForm('ordre', v)}
             placeholder="1"
             keyboardType="numeric"
+            error={errors.ordre}
           />
 
-          {/* ─── Dates ─── */}
-          <View className="flex-row gap-3 mb-4">
-            <View className="flex-1">
-              <Text className="text-sm font-semibold text-gray-600 mb-1">Date début</Text>
-              <TextInput
-                className="border border-gray-200 rounded-xl px-4 py-3 bg-white text-gray-800"
-                placeholder="AAAA-MM-JJ"
-                placeholderTextColor="#9ca3af"
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            <View style={{ flex: 1 }}>
+              <Field
+                label="Date début"
+                placeholder="2026-06-29"
                 value={form.date_debut}
-                onChangeText={v => setForm(f => ({ ...f, date_debut: v }))}
+                onChangeText={v => updateForm('date_debut', v)}
+                error={errors.date_debut}
+                maxLength={10}
               />
             </View>
-            <View className="flex-1">
-              <Text className="text-sm font-semibold text-gray-600 mb-1">Date fin</Text>
-              <TextInput
-                className="border border-gray-200 rounded-xl px-4 py-3 bg-white text-gray-800"
-                placeholder="AAAA-MM-JJ"
-                placeholderTextColor="#9ca3af"
+            <View style={{ flex: 1 }}>
+              <Field
+                label="Date fin"
+                placeholder="2026-07-15"
                 value={form.date_fin}
-                onChangeText={v => setForm(f => ({ ...f, date_fin: v }))}
+                onChangeText={v => updateForm('date_fin', v)}
+                error={errors.date_fin}
+                maxLength={10}
               />
             </View>
           </View>
 
-          {/* ─── Statut ─── */}
-          <Text className="text-sm font-semibold text-gray-600 mb-2">Statut initial</Text>
-          <View className="flex-row gap-2 mb-5">
-            {STATUTS.map(s => (
-              <TouchableOpacity
-                key={s.value}
-                onPress={() => setForm(f => ({ ...f, statut: s.value }))}
-                className={`flex-1 py-3 rounded-xl border items-center ${
-                  form.statut === s.value
-                    ? 'bg-blue-600 border-blue-600'
-                    : 'bg-white border-gray-200'
-                }`}
-              >
-                <Text className={`text-xs font-semibold ${form.statut === s.value ? 'text-white' : 'text-gray-600'}`}>
-                  {s.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
+          {/* Section Statut */}
+          <View style={{ marginBottom: 24 }}>
+            <Text style={styles.sectionLabel}>Statut initial</Text>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              {STATUTS.map(s => {
+                const isSelected = form.statut === s.value;
+                return (
+                  <TouchableOpacity
+                    key={s.value}
+                    onPress={() => updateForm('statut', s.value)}
+                    activeOpacity={0.7}
+                    style={[
+                      styles.statutButton,
+                      isSelected ? styles.statutButtonSelected : styles.statutButtonUnselected
+                    ]}
+                  >
+                    <Text style={[styles.statutText, isSelected ? { color: '#fff' } : { color: '#4b5563' }]}>
+                      {s.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </View>
 
-          {/* ─── Intervenants ─── */}
+          {/* Section Intervenants */}
           {intervenants.length > 0 && (
-            <>
-              <Text className="text-sm font-semibold text-gray-600 mb-2">
-                Intervenants
-              </Text>
-              {intervenants.map(i => (
-                <TouchableOpacity
-                  key={i.id}
-                  onPress={() => toggleIntervenant(i.id)}
-                  className={`flex-row items-center p-3 rounded-xl mb-2 border ${
-                    selected.includes(i.id)
-                      ? 'bg-blue-50 border-blue-300'
-                      : 'bg-white border-gray-200'
-                  }`}
-                >
-                  {/* Checkbox */}
-                  <View className={`w-5 h-5 rounded border mr-3 items-center justify-center ${
-                    selected.includes(i.id) ? 'bg-blue-600 border-blue-600' : 'border-gray-300'
-                  }`}>
-                    {selected.includes(i.id) && (
-                      <Text className="text-white text-xs font-bold">✓</Text>
-                    )}
-                  </View>
+            <View style={styles.intervenantSection}>
+              <Text style={styles.sectionLabel}>Intervenants assignés</Text>
+              {intervenants.map(i => {
+                const isChecked = selected.includes(i.id);
+                return (
+                  <TouchableOpacity
+                    key={i.id}
+                    onPress={() => toggleIntervenant(i.id)}
+                    activeOpacity={0.8}
+                    style={[styles.intervenantItem, isChecked && styles.intervenantItemChecked]}
+                  >
+                    <View style={[styles.checkbox, isChecked && styles.checkboxChecked]}>
+                      {isChecked && <Text style={styles.checkboxCheckmark}>✓</Text>}
+                    </View>
 
-                  {/* Nom */}
-                  <View className="flex-1">
-                    <Text className="text-gray-800 font-medium">
-                      {i.nom} {i.prenom || ''}
-                    </Text>
-                    {i.role ? (
-                      <Text className="text-gray-400 text-xs">{i.role}</Text>
-                    ) : null}
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: '#1f2937', fontWeight: '600', fontSize: 14 }}>
+                        {i.nom} {i.prenom || ''}
+                      </Text>
+                      {i.role && (
+                        <Text style={{ color: '#9ca3af', fontSize: 12, marginTop: 2 }}>{i.role}</Text>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           )}
 
-          {/* ─── Bouton sauvegarder ─── */}
+          {/* Bouton de sauvegarde */}
           <TouchableOpacity
             onPress={handleSave}
             disabled={saving}
-            className={`mt-4 py-4 rounded-xl items-center flex-row justify-center ${
-              saving ? 'bg-blue-300' : 'bg-blue-600'
-            }`}
+            activeOpacity={0.8}
+            style={[styles.saveButton, saving ? { backgroundColor: '#93c5fd' } : { backgroundColor: '#2563eb' }]}
           >
             {saving && <ActivityIndicator color="#fff" style={{ marginRight: 8 }} />}
-            <Text className="text-white font-bold text-base">
-              {saving ? 'Création…' : "Créer l'étape"}
+            <Text style={styles.saveButtonText}>
+              {saving ? 'Création en cours…' : "Créer l'étape"}
             </Text>
           </TouchableOpacity>
 
@@ -239,3 +292,140 @@ export default function CreateEtape() {
     </KeyboardAvoidingView>
   );
 }
+
+// Feuille de style native isolée
+const styles = StyleSheet.create({
+  pageTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1f2937',
+    marginBottom: 16,
+    paddingHorizontal: 4,
+  },
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#f3f4f6',
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 3 },
+      android: { elevation: 2 },
+    }),
+  },
+  fieldContainer: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    color: '#6b7280',
+    marginBottom: 6,
+  },
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    color: '#6b7280',
+    marginBottom: 12,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#fff',
+    color: '#1f2937',
+    fontSize: 14,
+  },
+  inputFocused: {
+    borderColor: '#2563eb',
+  },
+  inputError: {
+    borderColor: '#ef4444',
+    backgroundColor: 'rgba(239, 68, 68, 0.03)',
+  },
+  errorText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#ef4444',
+    marginTop: 4,
+    paddingLeft: 4,
+  },
+  statutButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statutButtonSelected: {
+    backgroundColor: '#2563eb',
+    borderColor: '#2563eb',
+  },
+  statutButtonUnselected: {
+    backgroundColor: '#f9fafb',
+    borderColor: '#e5e7eb',
+  },
+  statutText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  intervenantSection: {
+    marginBottom: 24,
+    borderTopWidth: 1,
+    borderTopColor: '#f3f4f6',
+    paddingTop: 16,
+  },
+  intervenantItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#f3f4f6',
+    backgroundColor: '#fff',
+  },
+  intervenantItemChecked: {
+    backgroundColor: 'rgba(37, 99, 235, 0.03)',
+    borderColor: '#bfdbfe',
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    marginRight: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxChecked: {
+    backgroundColor: '#2563eb',
+    borderColor: '#2563eb',
+  },
+  checkboxCheckmark: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  saveButton: {
+    marginTop: 8,
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  saveButtonText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 16,
+  },
+});
