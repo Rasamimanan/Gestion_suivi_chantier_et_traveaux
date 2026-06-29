@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { getToken, removeToken, removeUser } from './storage';
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://mobilback-1.onrender.com/api';
+const BASE_URL = 'https://mobilback-1.onrender.com/api';
 console.log("BASE_URL =", BASE_URL);
 const api = axios.create({ baseURL: BASE_URL, timeout: 15000 });
 
