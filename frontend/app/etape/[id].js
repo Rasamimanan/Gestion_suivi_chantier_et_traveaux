@@ -18,8 +18,8 @@ import { deletePhoto, getEtape, getPhotos, updateEtape, uploadPhoto } from '../.
 // ✅ FIX : URL du serveur dérivée de la variable d'environnement
 // 'http://10.x.x.x:3000/api' → 'http://10.x.x.x:3000'
 // 'http://localhost:3000' ne fonctionne JAMAIS sur un vrai téléphone
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://192.168.43.220:3000/api';
-const SERVER_BASE = API_URL.replace(/\/api$/, '');
+import { SERVER_URL } from '../../services/api';
+const SERVER_BASE = SERVER_URL;
 
 function getPhotoUrl(urlFromDb) {
   if (!urlFromDb) return null;
