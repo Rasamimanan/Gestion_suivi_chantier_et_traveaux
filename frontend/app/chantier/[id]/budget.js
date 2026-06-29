@@ -36,7 +36,14 @@ export default function ChantierBudgetScreen() {
       setDepenses(depensesData);
       setRevenus(revenusData);
     } catch (error) {
-      Alert.alert('Erreur', 'Impossible de charger les données');
+      console.log("STATUS =", error?.response?.status);
+      console.log("DATA =", error?.response?.data);
+      console.log("MESSAGE =", error?.message);
+    
+      Alert.alert(
+        "Erreur",
+        JSON.stringify(error?.response?.data || error.message)
+      );
     } finally {
       setLoading(false);
     }
