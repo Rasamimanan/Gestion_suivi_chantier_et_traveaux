@@ -4,13 +4,53 @@
     "slug": "suivi-chantier",
     "version": "1.0.0",
     "scheme": "suivi-chantier",
-    "web": { "bundler": "metro" },
-    "plugins": ["expo-router", "expo-secure-store"],
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#2563eb"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.suivichantier.app",
+      "buildNumber": "1"
+    },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#3b82f6"
-      }
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#2563eb"
+      },
+      "package": "com.suivichantier.app",
+      "versionCode": 1,
+      "permissions": [
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "CAMERA",
+        "READ_MEDIA_IMAGES"
+      ]
     },
-    "ios": { "supportsTablet": true }
+    "web": {
+      "bundler": "metro",
+      "favicon": "./assets/icon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Suivi Chantier a besoin d'accéder à votre galerie pour ajouter des photos aux étapes."
+        }
+      ]
+    ],
+    "extra": {
+      "apiUrl": "https://mobilback-3jdv.onrender.com/api",
+      "eas": {
+        "projectId": "suivi-chantier"
+      }
+    }
   }
 }
