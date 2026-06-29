@@ -13,23 +13,32 @@ function RootNavigator() {
     if (loading) return;
 
     const inAuthGroup = segments[0] === '(auth)';
+    const inTabs = segments[0] === '(tabs)';
+    const onWelcome = segments[0] === 'welcome' || segments.length === 0;
 
-    // 🔐 NON CONNECTÉ → bloqué hors auth
-    if (!isAuthenticated && !inAuthGroup) {
-      router.replace('/(auth)/login');
-    }
-
-    // 🔓 CONNECTÉ → bloque accès login/register
+    // 🔓 CONNECTÉ → redirige vers les tabs
     if (isAuthenticated && inAuthGroup) {
       router.replace('/(tabs)');
+      return;
+    }
+
+    // 🔐 NON CONNECTÉ → bloque l'accès aux tabs, renvoie au welcome
+    if (!isAuthenticated && inTabs) {
+      router.replace('/welcome');
+      return;
+    }
+
+    // 🏠 Première visite → page welcome
+    if (!isAuthenticated && segments.length === 0) {
+      router.replace('/welcome');
     }
 
   }, [isAuthenticated, loading, segments]);
 
   if (loading) {
     return (
-      <View className="flex-1 justify-center items-center bg-white">
-        <ActivityIndicator size="large" color="#3b82f6" />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
+        <ActivityIndicator size="large" color="#1a3a5c" />
       </View>
     );
   }
@@ -37,11 +46,14 @@ function RootNavigator() {
   return (
     <Stack
       screenOptions={{
-        headerStyle: { backgroundColor: '#3b82f6' },
+        headerStyle: { backgroundColor: '#1a3a5c' },
         headerTintColor: '#fff',
         headerTitleStyle: { fontWeight: 'bold' },
       }}
     >
+      {/* WELCOME / LANDING */}
+      <Stack.Screen name="welcome" options={{ headerShown: false }} />
+
       {/* AUTH GROUP */}
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
 
@@ -65,7 +77,6 @@ function RootNavigator() {
   );
 }
 
-// ================= ROOT =================
 export default function RootLayout() {
   return (
     <AuthProvider>
